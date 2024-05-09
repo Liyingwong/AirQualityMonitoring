@@ -1,7 +1,18 @@
 #include <Wire.h>
+#include <ESP8266WiFi.h>
 #include <DHT.h>
 #include <LiquidCrystal_I2C.h> 
 #include "MQ135.h"
+
+String apiKey = "ZH0MFBJAVY9SIRYL"; //Enter your Write API Key from ThingSpeak
+
+const char* ssid = "UUMWiFi_Guest";
+const char* password = NULL;
+const char* server = "api.thingspeak.com";
+const int sensorPin = 0;
+int air_quality;
+
+WiFiClient client;
 
 // Define pin constants
 #define DHTPIN D5     // Pin for DHT22 sensor
@@ -23,6 +34,29 @@ void setup () {
   lcd.clear();
   delay(1000);
   lcd.clear(); // Clear again after a delay
+
+  lcd.print("Hello World :)");
+  delay(2000);
+
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to ");
+  lcd.setCursor(0,0);
+  lcd.print("Connecting to: ");
+  Serial.println(ssid);
+  lcd.setCursor(0,1);
+  lcd.println(ssid);
+   
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  
+  Serial.println("");
+  Serial.println("WiFi connected");
+  lcd.clear();
+  lcd.print("WiFi Connected");
+  delay(1000);
+
 }
 
 void loop() {
@@ -33,7 +67,7 @@ void loop() {
   float t = dht.readTemperature (); // Read temperature from DHT sensor
   // Read analog value from MQ135 sensor and convert to CO2 level
   int analogValue = analogRead(A0); // Read analog value from MQ135 sensor
-  co2lvl = analogValue - 600; // Adjust for sensor offset
+  co2lvl = analogValue - 400; // Adjust for sensor offset
   co2lvl = map(co2lvl, 0, 1024, 400, 5000); // Map analog reading to CO2 range
 
   // Check for NaN (not a number) readings
@@ -52,6 +86,7 @@ void loop() {
   Serial.print("CO2: ");
   Serial.print(co2lvl);
   Serial.println(" PPM");
+
 
   // Display readings on LCD
   lcd.setCursor(0,0);
@@ -74,22 +109,48 @@ void loop() {
   lcd.print(" PPM");
 
   // Display air quality status based on CO2 level
-  if ((co2lvl >= 350) && (co2lvl <= 1400))
+  if ((co2lvl >= 300) && (co2lvl <= 1400))
   {
     lcd.setCursor(0,1);
-    lcd.print("  Good ");
-    lcd.write(byte(0)); // Display custom character for good air quality
+    lcd.print("Condition: Good ");
+    Serial.println("Condition: Good");
   }
   else if ((co2lvl >= 1400) && (co2lvl <= 2000))
   {
     lcd.setCursor(0,1);
-    lcd.print("  Bad "); // Display custom character for bad air quality
-    lcd.write(byte(1));
+    lcd.print("Condition: Bad "); // Display custom character for bad air quality
+    Serial.println("Condition: Bad");
   }
   else
   {
     lcd.setCursor(0,1);
-    lcd.print(" Danger!");
+    lcd.print("   Danger!");
+    Serial.println("Condition: Danger");
   }
+
+   if (client.connect(server, 80)) {
+    String postStr = apiKey;
+    postStr += "&field1=";
+    postStr += String(t);
+    postStr += "&field2=";
+    postStr += String(h);
+    postStr += "&field3=";
+    postStr += String(co2lvl);
+    postStr += "\r\n\r\n";
+    
+    client.print("POST /update HTTP/1.1\n");
+    client.print("Host: api.thingspeak.com\n");
+    client.print("Connection: close\n");
+    client.print("X-THINGSPEAKAPIKEY: " + apiKey + "\n");
+    client.print("Content-Type: application/x-www-form-urlencoded\n");
+    client.print("Content-Length: ");
+    client.print(postStr.length());
+    client.print("\n\n");
+    client.print(postStr);
+    
+    Serial.println("Data sent to ThingSpeak");
+   }
+    client.stop();
   delay(2000); // Delay before next loop iteration
 }
+
